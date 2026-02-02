@@ -49,3 +49,16 @@ terraform.tfvars
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Local documentation (keep local only)
+SETUP.md
+DEPLOYMENT.md
+ARCHITECTURE.md
+MODERNIZATION-SUMMARY.md
+REFRESH-DOCKER.md
+DEPLOYMENT-STEPS.md
+QUICK-START-CHECKLIST.md
+WHAT-TO-PUSH.md
+AWS-GITHUB-CONNECTION.md
+infrastructure/README.md
+infrastructure/CHECKLIST.md
