@@ -62,3 +62,10 @@ WHAT-TO-PUSH.md
 AWS-GITHUB-CONNECTION.md
 infrastructure/README.md
 infrastructure/CHECKLIST.md
+NEXT-STEPS.md
+.github/workflows/*.md
+.github/workflows/README.md
+.github/workflows/DEPLOYMENT-GUIDE.md
+.github/workflows/SCREENSHOT-GUIDE.md
+.github/workflows/TERRAFORM-DEPLOYMENT-EXPLAINED.md
+.github/workflows/TERRAFORM-EXPLAINED.md
