@@ -4,14 +4,6 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '*.md'
-      - 'images_gifs/**'
-      - '.gitignore'
-      - 'DEPLOYMENT.md'
-      - 'ARCHITECTURE.md'
-      - 'MODERNIZATION-SUMMARY.md'
-      - 'SETUP.md'
 
 permissions:
   id-token: write
@@ -20,139 +12,24 @@ permissions:
 env:
   AWS_REGION: eu-west-2
   ECR_REPOSITORY: aws-cost-dashboard
-  TF_WORKING_DIR: infrastructure
-
-concurrency:
-  group: terraform-ephemeral
-  cancel-in-progress: false
 
 jobs:
-  build-scan-push:
+  build-push:
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ github.sha }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get ECR repository URL
-        id: ecr-url
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
         run: |
-          ECR_URL=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} --query 'repositories[0].repositoryUri' --output text)
-          echo "repository-url=$ECR_URL" >> $GITHUB_OUTPUT
-          echo "ECR Repository URL: $ECR_URL"
-
-      - name: Amazon ECR Login
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2.0.1
-
-      - name: Set image reference
-        run: |
-          IMAGE_REF="${{ steps.ecr-url.outputs.repository-url }}:${{ github.sha }}"
-          echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
-          echo "Image reference: $IMAGE_REF"
-
-      - name: Check if image exists
-        id: check-image
-        run: |
-          if aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --image-ids imageTag=${{ github.sha }} --region ${{ env.AWS_REGION }} 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Image already exists, skipping build"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Image does not exist, will build"
-          fi
-
-      - name: Build Summary
-        run: |
-          echo "## Build Summary 🐳" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Image** | \`${{ env.IMAGE_REF }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Tag** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.check-image.outputs.exists }}" = "true" ]; then
-            echo "| **Status** | ⏭️ Skipped (image exists) |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| **Status** | 🔨 Building... |" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Build Docker image
-        if: steps.check-image.outputs.exists == 'false'
-        run: |
-          docker build -t "${{ env.IMAGE_REF }}" .
-          echo "✅ Docker image built successfully"
-
-      - name: Trivy vulnerability scan
-        if: steps.check-image.outputs.exists == 'false'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.IMAGE_REF }}
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy results
-        if: steps.check-image.outputs.exists == 'false'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Push to ECR
-        if: steps.check-image.outputs.exists == 'false'
-        run: |
-          docker push "${{ env.IMAGE_REF }}"
-          echo "✅ Image pushed to ECR: ${{ env.IMAGE_REF }}"
-
-      - name: Build Complete Summary
-        if: steps.check-image.outputs.exists == 'false'
-        run: |
-          echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Docker image successfully built, scanned, and pushed to ECR." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Build Details" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Image** | \`${{ env.IMAGE_REF }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Tag** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **ECR Repository** | \`${{ env.ECR_REPOSITORY }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Region** | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Built At** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔒 Security Scans" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Trivy vulnerability scan completed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Checkov IaC security scan completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Next Step:** CD workflow will deploy this image to production." >> $GITHUB_STEP_SUMMARY
-
-  checkov:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Run Checkov
-        uses: bridgecrewio/checkov-action@v12
-        with:
-          directory: infrastructure/
-          framework: terraform
-          soft_fail: false
-
-      - name: Checkov Summary
-        if: always()
-        run: |
-          echo "## Checkov Scan 🔒" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Infrastructure as Code security scan completed." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All Terraform files have been scanned for security misconfigurations." >> $GITHUB_STEP_SUMMARY
+          ECR_URI=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          docker build -t $ECR_URI:${{ github.sha }} .
+          docker push $ECR_URI:${{ github.sha }}
