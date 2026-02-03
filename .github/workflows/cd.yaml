@@ -1,0 +1,213 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+concurrency:
+  group: terraform-ephemeral
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  TF_WORKING_DIR: infrastructure
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="image_tag=${{ github.event.workflow_run.head_sha }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="terraform_state_bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -out=tfplan
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: |
+            ${{ env.TF_WORKING_DIR }}/.terraform/
+            ${{ env.TF_WORKING_DIR }}/tfplan
+
+      - name: Plan Summary
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "## Terraform Plan 📋" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ github.event.workflow_run.head_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AWS Region** | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Domain** | \`${{ secrets.DOMAIN_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Infrastructure Changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Preview of planned changes:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```hcl' >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color tfplan | head -150 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ **Review the changes above before approving deployment**" >> $GITHUB_STEP_SUMMARY
+
+  terraform-apply:
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply \
+            -auto-approve \
+            -var="image_tag=${{ github.event.workflow_run.head_sha }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="terraform_state_bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}"
+
+      - name: Get Terraform Outputs
+        id: terraform-outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          DASHBOARD_URL=$(terraform output -raw dashboard_url 2>/dev/null || echo "https://dashboard.${{ secrets.DOMAIN_NAME }}")
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "N/A")
+          ECS_CLUSTER=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "N/A")
+          ECS_SERVICE=$(terraform output -raw ecs_service_name 2>/dev/null || echo "N/A")
+          
+          echo "url=$DASHBOARD_URL" >> $GITHUB_OUTPUT
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "ecs_cluster=$ECS_CLUSTER" >> $GITHUB_OUTPUT
+          echo "ecs_service=$ECS_SERVICE" >> $GITHUB_OUTPUT
+          
+          echo "Dashboard URL: $DASHBOARD_URL"
+          echo "ALB DNS: $ALB_DNS"
+          echo "ECS Cluster: $ECS_CLUSTER"
+          echo "ECS Service: $ECS_SERVICE"
+
+      - name: Health Check
+        run: |
+          URL="${{ steps.terraform-outputs.outputs.url }}/health"
+          MAX_ATTEMPTS=15
+          DELAY=20
+
+          echo "## Health Check 🏥" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Checking application health at: \`$URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Attempt $i of $MAX_ATTEMPTS..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "## ✅ Health Check Passed" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| **URL** | $URL |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Status** | $STATUS ✅ |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Attempts** | $i |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Dashboard** | ${{ steps.terraform-outputs.outputs.url }} |" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+
+            echo "Status: $STATUS - waiting ${DELAY}s..."
+            sleep $DELAY
+          done
+
+          echo "## ❌ Health Check Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | $URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | Failed after $MAX_ATTEMPTS attempts |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Application may still be starting. Check ECS service status manually." >> $GITHUB_STEP_SUMMARY
+          exit 1
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your AWS Cost Dashboard has been successfully deployed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Dashboard URL** | [${{ steps.terraform-outputs.outputs.url }}](${{ steps.terraform-outputs.outputs.url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ALB DNS** | \`${{ steps.terraform-outputs.outputs.alb_dns }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ECS Cluster** | \`${{ steps.terraform-outputs.outputs.ecs_cluster }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ECS Service** | \`${{ steps.terraform-outputs.outputs.ecs_service }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ github.event.workflow_run.head_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Region** | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed At** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Dashboard](${{ steps.terraform-outputs.outputs.url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [AWS Console - ECS](${{ env.AWS_REGION }}.console.aws.amazon.com/ecs/v2/clusters/${{ steps.terraform-outputs.outputs.ecs_cluster }}/services/${{ steps.terraform-outputs.outputs.ecs_service }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Commit Details](https://github.com/${{ github.repository }}/commit/${{ github.event.workflow_run.head_sha }})" >> $GITHUB_STEP_SUMMARY
