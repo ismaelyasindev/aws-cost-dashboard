@@ -1,0 +1,48 @@
+name: Health Check
+
+on:
+  workflow_run:
+    workflows: ["Apply"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Wait for deployment
+        run: sleep 60
+
+      - name: Health Check
+        run: |
+          echo "Running health check..."
+
+          max_attempts=10
+          attempt=1
+          URL="https://dashboard.${{ secrets.DOMAIN_NAME }}/health"
+
+          while [ $attempt -le $max_attempts ]; do
+            response=$(curl -sS -m 10 -o /dev/null -w "%{http_code}" $URL || echo "000")
+
+            if [ "$response" = "200" ]; then
+              echo "Health check passed!"
+              exit 0
+            fi
+
+            echo "Attempt $attempt/$max_attempts failed (HTTP $response)"
+
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Retrying in 30s..."
+              sleep 30
+            fi
+
+            attempt=$((attempt + 1))
+          done
+
+          echo "Health check failed after $max_attempts attempts"
+          exit 1
+
+      - name: Summary
+        if: success()
+        run: echo "✅ Health check complete (200 OK)"

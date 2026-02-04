@@ -1,8 +1,8 @@
-name: CD
+name: Apply
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Deploy"]
     types: [completed]
     branches: [main]
 
