@@ -186,7 +186,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
-    sid    = "IAMTaskExecutionRole"
+    sid    = "IAMPermissions"
     effect = "Allow"
     actions = [
       "iam:CreateRole",
@@ -199,10 +199,12 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
       "iam:ListInstanceProfilesForRole",
-      "iam:GetOpenIDConnectProvider"
+      "iam:GetOpenIDConnectProvider",
+      "iam:ListRoles"
     ]
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-execution-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-github-role",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
     ]
   }
@@ -267,7 +269,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "cloudwatch:*",
       "logs:DescribeLogGroups",
       "logs:CreateLogGroup",
-      "logs:PutRetentionPolicy"
+      "logs:PutRetentionPolicy",
+      "logs:ListTagsForResource"
     ]
     resources = ["*"]
   }
@@ -278,7 +281,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     actions = [
       "acm:DescribeCertificate",
       "acm:ListCertificates",
-      "acm:GetCertificate"
+      "acm:GetCertificate",
+      "acm:ListTagsForCertificate"
     ]
     resources = ["*"]
   }
@@ -293,7 +297,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "sns:CreateTopic",
       "sns:DeleteTopic",
       "sns:Subscribe",
-      "sns:Unsubscribe"
+      "sns:Unsubscribe",
+      "sns:ListTagsForResource"
     ]
     resources = ["*"]
   }
