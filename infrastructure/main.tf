@@ -151,7 +151,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     effect = "Allow"
     actions = [
       "ecr:DescribeRepositories",
-      "ecr:DescribeImages"
+      "ecr:DescribeImages",
+      "ecr:ListTagsForResource"
     ]
     resources = ["*"]
   }
@@ -197,10 +198,12 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "iam:DetachRolePolicy",
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
-      "iam:ListInstanceProfilesForRole"
+      "iam:ListInstanceProfilesForRole",
+      "iam:GetOpenIDConnectProvider"
     ]
     resources = [
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-execution-role"
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-execution-role",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
     ]
   }
 
@@ -238,11 +241,13 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "route53:ChangeResourceRecordSets",
       "route53:GetHostedZone",
       "route53:ListResourceRecordSets",
+      "route53:ListHostedZones",
       "route53:GetChange"
     ]
     resources = [
       "arn:aws:route53:::hostedzone/${data.aws_route53_zone.main.zone_id}",
-      "arn:aws:route53:::change/*"
+      "arn:aws:route53:::change/*",
+      "*"
     ]
   }
 
@@ -259,7 +264,36 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     sid    = "CloudWatchPermissions"
     effect = "Allow"
     actions = [
-      "cloudwatch:*"
+      "cloudwatch:*",
+      "logs:DescribeLogGroups",
+      "logs:CreateLogGroup",
+      "logs:PutRetentionPolicy"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ACMPermissions"
+    effect = "Allow"
+    actions = [
+      "acm:DescribeCertificate",
+      "acm:ListCertificates",
+      "acm:GetCertificate"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "SNSPermissions"
+    effect = "Allow"
+    actions = [
+      "sns:GetTopicAttributes",
+      "sns:SetTopicAttributes",
+      "sns:ListTopics",
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:Subscribe",
+      "sns:Unsubscribe"
     ]
     resources = ["*"]
   }
