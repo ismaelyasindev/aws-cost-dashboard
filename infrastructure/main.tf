@@ -147,6 +147,16 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
+    sid    = "ECRDescribe"
+    effect = "Allow"
+    actions = [
+      "ecr:DescribeRepositories",
+      "ecr:DescribeImages"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "ECRPush"
     effect = "Allow"
     actions = [
@@ -154,8 +164,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ecr:PutImage",
       "ecr:InitiateLayerUpload",
       "ecr:UploadLayerPart",
-      "ecr:CompleteLayerUpload",
-      "ecr:DescribeImages"
+      "ecr:CompleteLayerUpload"
     ]
     resources = [aws_ecr_repository.aws_cost_dashboard.arn]
   }
