@@ -1,5 +1,3 @@
-# AWS Cost Dashboard - Simplified Single Terraform Configuration
-# All infrastructure in one place, using modules
 
 # Data Sources
 data "aws_route53_zone" "main" {

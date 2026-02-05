@@ -31,5 +31,5 @@ jobs:
       - name: Build and push
         run: |
           ECR_URI=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          docker build -t $ECR_URI:${{ github.sha }} .
+          docker build -f docker/Dockerfile -t $ECR_URI:${{ github.sha }} .
           docker push $ECR_URI:${{ github.sha }}
