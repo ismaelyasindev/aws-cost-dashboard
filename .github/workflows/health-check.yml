@@ -6,6 +6,9 @@ on:
     types: [completed]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   healthcheck:
     runs-on: ubuntu-latest

@@ -64,14 +64,16 @@ resource "aws_eip" "nat" {
 }
 
 # NAT Gateway for private subnet outbound traffic
+# Must be placed in a public subnet to access Internet Gateway
 resource "aws_nat_gateway" "main" {
-  availability_mode = "regional"
-  allocation_id     = aws_eip.nat.id
-  vpc_id            = aws_vpc.main.id
+  allocation_id = aws_eip.nat.id
+  subnet_id     = values(aws_subnet.public)[0].id  # Place in first public subnet
 
   tags = {
     Name = "${var.project_name}-nat-gateway"
   }
+
+  depends_on = [aws_internet_gateway.main]
 }
 
 # Public route table
