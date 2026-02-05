@@ -298,7 +298,11 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "sns:DeleteTopic",
       "sns:Subscribe",
       "sns:Unsubscribe",
-      "sns:ListTagsForResource"
+      "sns:ListTagsForResource",
+      "sns:GetSubscriptionAttributes",
+      "sns:SetSubscriptionAttributes",
+      "sns:ListSubscriptions",
+      "sns:ListSubscriptionsByTopic"
     ]
     resources = ["*"]
   }
