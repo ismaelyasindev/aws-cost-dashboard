@@ -9,10 +9,6 @@ resource "aws_route53_zone" "main" {
   tags = {
     Name = "${var.domain_name}-hosted-zone"
   }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # ECR Repository
@@ -98,20 +94,12 @@ resource "aws_iam_openid_connect_provider" "github" {
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1"
   ]
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # IAM Role for GitHub Actions
 resource "aws_iam_role" "github_actions" {
   name               = "aws-cost-dashboard-github-role"
   assume_role_policy = data.aws_iam_policy_document.github_actions_trust.json
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 data "aws_iam_policy_document" "github_actions_trust" {
