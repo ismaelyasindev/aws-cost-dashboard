@@ -1,11 +1,19 @@
 
 # Data Sources
-data "aws_route53_zone" "main" {
-  name         = var.domain_name
-  private_zone = false
-}
-
 data "aws_caller_identity" "current" {}
+
+# Route53 Hosted Zone - managed by Terraform
+resource "aws_route53_zone" "main" {
+  name = var.domain_name
+
+  tags = {
+    Name = "${var.domain_name}-hosted-zone"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
 
 # ECR Repository
 resource "aws_ecr_repository" "aws_cost_dashboard" {
@@ -56,7 +64,7 @@ resource "aws_route53_record" "cert_validation" {
   }
 
   allow_overwrite = true
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = aws_route53_zone.main.zone_id
   name            = each.value.name
   records         = [each.value.record]
   ttl             = 60
@@ -136,40 +144,32 @@ data "aws_iam_policy_document" "github_actions_trust" {
 }
 
 # IAM Policy for GitHub Actions
+# Comprehensive permissions so Terraform plan and apply work without failures
 data "aws_iam_policy_document" "github_actions_permissions" {
-  statement {
-    sid    = "ECRAuth"
-    effect = "Allow"
-    actions = [
-      "ecr:GetAuthorizationToken"
-    ]
-    resources = ["*"]
-  }
 
+  # ECR - build and push Docker images
   statement {
-    sid    = "ECRDescribe"
+    sid    = "ECR"
     effect = "Allow"
     actions = [
-      "ecr:DescribeRepositories",
-      "ecr:DescribeImages",
-      "ecr:ListTagsForResource"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ECRPush"
-    effect = "Allow"
-    actions = [
+      "ecr:GetAuthorizationToken",
       "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
       "ecr:PutImage",
       "ecr:InitiateLayerUpload",
       "ecr:UploadLayerPart",
-      "ecr:CompleteLayerUpload"
+      "ecr:CompleteLayerUpload",
+      "ecr:DescribeRepositories",
+      "ecr:DescribeImages",
+      "ecr:ListTagsForResource",
+      "ecr:TagResource",
+      "ecr:UntagResource"
     ]
-    resources = [aws_ecr_repository.aws_cost_dashboard.arn]
+    resources = ["*"]
   }
 
+  # Terraform state in S3
   statement {
     sid    = "TerraformState"
     effect = "Allow"
@@ -185,128 +185,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     ]
   }
 
-  statement {
-    sid    = "IAMPermissions"
-    effect = "Allow"
-    actions = [
-      "iam:CreateRole",
-      "iam:DeleteRole",
-      "iam:GetRole",
-      "iam:TagRole",
-      "iam:PassRole",
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:ListAttachedRolePolicies",
-      "iam:ListRolePolicies",
-      "iam:ListInstanceProfilesForRole",
-      "iam:GetOpenIDConnectProvider",
-      "iam:ListRoles"
-    ]
-    resources = [
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-execution-role",
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-github-role",
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
-    ]
-  }
-
-  statement {
-    sid    = "EC2Permissions"
-    effect = "Allow"
-    actions = [
-      "ec2:*"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ECSPermissions"
-    effect = "Allow"
-    actions = [
-      "ecs:*"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ELBPermissions"
-    effect = "Allow"
-    actions = [
-      "elasticloadbalancing:*"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "Route53Permissions"
-    effect = "Allow"
-    actions = [
-      "route53:ChangeResourceRecordSets",
-      "route53:GetHostedZone",
-      "route53:ListResourceRecordSets",
-      "route53:ListHostedZones",
-      "route53:GetChange"
-    ]
-    resources = [
-      "arn:aws:route53:::hostedzone/${data.aws_route53_zone.main.zone_id}",
-      "arn:aws:route53:::change/*",
-      "*"
-    ]
-  }
-
-  statement {
-    sid    = "WAFPermissions"
-    effect = "Allow"
-    actions = [
-      "wafv2:*"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "CloudWatchPermissions"
-    effect = "Allow"
-    actions = [
-      "cloudwatch:*",
-      "logs:DescribeLogGroups",
-      "logs:CreateLogGroup",
-      "logs:PutRetentionPolicy",
-      "logs:ListTagsForResource"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ACMPermissions"
-    effect = "Allow"
-    actions = [
-      "acm:DescribeCertificate",
-      "acm:ListCertificates",
-      "acm:GetCertificate",
-      "acm:ListTagsForCertificate"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "SNSPermissions"
-    effect = "Allow"
-    actions = [
-      "sns:GetTopicAttributes",
-      "sns:SetTopicAttributes",
-      "sns:ListTopics",
-      "sns:CreateTopic",
-      "sns:DeleteTopic",
-      "sns:Subscribe",
-      "sns:Unsubscribe",
-      "sns:ListTagsForResource",
-      "sns:GetSubscriptionAttributes",
-      "sns:SetSubscriptionAttributes",
-      "sns:ListSubscriptions",
-      "sns:ListSubscriptionsByTopic"
-    ]
-    resources = ["*"]
-  }
-
+  # Terraform state locking in DynamoDB
   statement {
     sid    = "DynamoDBLock"
     effect = "Allow"
@@ -318,6 +197,139 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     resources = [
       "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/terraform-state-lock-aws-cost-dashboard"
     ]
+  }
+
+  # IAM - manage project roles, policies, and OIDC provider
+  statement {
+    sid    = "IAMRoles"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole",
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:PassRole",
+      "iam:UpdateRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+      "iam:ListInstanceProfilesForRole",
+      "iam:ListRoleTags"
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-cost-dashboard-*"
+    ]
+  }
+
+  statement {
+    sid    = "IAMPolicies"
+    effect = "Allow"
+    actions = [
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:TagPolicy",
+      "iam:UntagPolicy"
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/aws-cost-dashboard-*"
+    ]
+  }
+
+  statement {
+    sid    = "IAMOIDCProvider"
+    effect = "Allow"
+    actions = [
+      "iam:GetOpenIDConnectProvider",
+      "iam:TagOpenIDConnectProvider",
+      "iam:ListOpenIDConnectProviderTags"
+    ]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+    ]
+  }
+
+  # EC2 and VPC - full access for networking resources
+  statement {
+    sid       = "EC2"
+    effect    = "Allow"
+    actions   = ["ec2:*"]
+    resources = ["*"]
+  }
+
+  # ECS - full access for cluster, service, task management
+  statement {
+    sid       = "ECS"
+    effect    = "Allow"
+    actions   = ["ecs:*"]
+    resources = ["*"]
+  }
+
+  # ELB - full access for load balancer management
+  statement {
+    sid       = "ELB"
+    effect    = "Allow"
+    actions   = ["elasticloadbalancing:*"]
+    resources = ["*"]
+  }
+
+  # Route53 - full access for DNS management
+  statement {
+    sid       = "Route53"
+    effect    = "Allow"
+    actions   = ["route53:*"]
+    resources = ["*"]
+  }
+
+  # ACM - full access for certificate management
+  statement {
+    sid       = "ACM"
+    effect    = "Allow"
+    actions   = ["acm:*"]
+    resources = ["*"]
+  }
+
+  # WAF - full access for web application firewall
+  statement {
+    sid       = "WAF"
+    effect    = "Allow"
+    actions   = ["wafv2:*"]
+    resources = ["*"]
+  }
+
+  # CloudWatch and Logs - full access for monitoring
+  statement {
+    sid       = "CloudWatch"
+    effect    = "Allow"
+    actions   = ["cloudwatch:*", "logs:*"]
+    resources = ["*"]
+  }
+
+  # SNS - full access for alert notifications
+  statement {
+    sid       = "SNS"
+    effect    = "Allow"
+    actions   = ["sns:*"]
+    resources = ["*"]
+  }
+
+  # KMS - needed for SNS encryption
+  statement {
+    sid    = "KMS"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey",
+      "kms:DescribeKey"
+    ]
+    resources = ["*"]
   }
 }
 
@@ -599,7 +611,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy" {
 
 # Route53 Records
 resource "aws_route53_record" "dashboard" {
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = aws_route53_zone.main.zone_id
   name            = local.alt_domain
   type            = "A"
   allow_overwrite = true
@@ -612,7 +624,7 @@ resource "aws_route53_record" "dashboard" {
 }
 
 resource "aws_route53_record" "root" {
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = aws_route53_zone.main.zone_id
   name            = var.domain_name
   type            = "A"
   allow_overwrite = true

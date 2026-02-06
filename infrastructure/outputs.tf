@@ -37,3 +37,13 @@ output "sns_topic_arn" {
   description = "ARN of the SNS topic for alerts"
   value       = aws_sns_topic.alerts.arn
 }
+
+output "route53_zone_id" {
+  description = "ID of the Route53 hosted zone"
+  value       = aws_route53_zone.main.zone_id
+}
+
+output "route53_nameservers" {
+  description = "Nameservers for the Route53 hosted zone"
+  value       = aws_route53_zone.main.name_servers
+}
