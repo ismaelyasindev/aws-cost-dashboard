@@ -12,6 +12,9 @@ permissions:
 env:
   AWS_REGION: eu-west-2
   TF_WORKING_DIR: infrastructure
+  DOMAIN_NAME: ismaelawsdashboard.site
+  ALERT_EMAIL: ismailsusulyman1@gmail.com
+  TERRAFORM_STATE_BUCKET: terraform-state-aws-cost-dashboard-ismael-yasin
 
 jobs:
   plan:
@@ -43,10 +46,10 @@ jobs:
           terraform plan \
             -var="image_tag=${{ github.event.workflow_run.head_sha }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
-            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="domain_name=${{ env.DOMAIN_NAME }}" \
             -var="github_repo=${{ github.repository }}" \
-            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
-            -var="terraform_state_bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -var="alert_email=${{ env.ALERT_EMAIL }}" \
+            -var="terraform_state_bucket=${{ env.TERRAFORM_STATE_BUCKET }}" \
             -out=tfplan
 
       - uses: actions/upload-artifact@v4
