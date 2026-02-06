@@ -27,10 +27,11 @@ RUN npm ci --only=production
 COPY App/server/ ./server/
 
 # Copy built React app from builder stage
-COPY --from=client-builder /app/App/build ./App/build
+# Server expects build at ../build relative to server directory
+COPY --from=client-builder /app/App/build ./build
 
 # Note: server code is at ./server/ (copied from App/server/)
-# React build is at ./App/build/ (copied from builder stage)
+# React build is at ./build/ (copied from builder stage)
 
 # Create non-root user for security (use 10001 to avoid conflict with base image UID 1000)
 RUN addgroup -g 10001 appuser && \
