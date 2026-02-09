@@ -9,7 +9,8 @@ import BudgetAlerts from './components/BudgetAlerts';
 import AccountsList from './components/AccountsList';
 import RegionalCosts from './components/RegionalCosts';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// In production the API is on the same origin; in local dev use localhost:3001
+const API_BASE_URL = process.env.REACT_APP_API_URL ?? '';
 
 interface DashboardData {
   accounts: any[];
@@ -54,7 +55,7 @@ function App() {
         });
         setLoading(false);
       } catch (err) {
-        setError('Failed to load dashboard data. Make sure the backend is running on port 3001.');
+        setError('Failed to load dashboard data. Please try again later.');
         setLoading(false);
         console.error('Error fetching data:', err);
       }
