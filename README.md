@@ -6,6 +6,8 @@ This repository contains the infrastructure and CI/CD configuration for deployin
 
 The deployment system uses GitHub Actions to build Docker images and deploy infrastructure changes automatically. When code is pushed to the main branch, it triggers a pipeline that builds the container image, pushes it to ECR, and updates the AWS infrastructure.
 
+![Deployment Architecture](assets/deployment-architecture.png)
+
 ## Project Structure
 
 ```
