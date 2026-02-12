@@ -120,12 +120,13 @@ data "aws_iam_policy_document" "github_actions_trust" {
     }
 
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${var.github_repo}:ref:refs/heads/main",
         "repo:${var.github_repo}:pull_request",
-        "repo:${var.github_repo}:environment:production"
+        "repo:${var.github_repo}:environment:production",
+        "repo:${var.github_repo}:workflow:*"
       ]
     }
   }
@@ -236,7 +237,10 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     effect = "Allow"
     actions = [
       "iam:GetOpenIDConnectProvider",
+      "iam:CreateOpenIDConnectProvider",
+      "iam:DeleteOpenIDConnectProvider",
       "iam:TagOpenIDConnectProvider",
+      "iam:UntagOpenIDConnectProvider",
       "iam:ListOpenIDConnectProviderTags"
     ]
     resources = [

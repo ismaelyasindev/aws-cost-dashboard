@@ -47,3 +47,4 @@ jobs:
             -var="terraform_state_bucket=${{ env.TERRAFORM_STATE_BUCKET }}" \
             -var="image_tag=destroy" \
             -auto-approve
+        continue-on-error: false
