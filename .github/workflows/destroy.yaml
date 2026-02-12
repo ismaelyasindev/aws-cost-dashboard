@@ -1,0 +1,49 @@
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  TF_WORKING_DIR: infrastructure
+  DOMAIN_NAME: ismaelawsdashboard.site
+  ALERT_EMAIL: ismailsusulyman1@gmail.com
+  TERRAFORM_STATE_BUCKET: terraform-state-aws-cost-dashboard-ismael-yasin
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform destroy \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="domain_name=${{ env.DOMAIN_NAME }}" \
+            -var="github_repo=${{ github.repository }}" \
+            -var="alert_email=${{ env.ALERT_EMAIL }}" \
+            -var="terraform_state_bucket=${{ env.TERRAFORM_STATE_BUCKET }}" \
+            -var="image_tag=destroy" \
+            -auto-approve
