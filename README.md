@@ -104,6 +104,8 @@ The deployment pipeline consists of three workflows that run sequentially.
 
 Builds the Docker image using a multi stage build process. The frontend is compiled and optimized, then combined with the backend server code. The final image is tagged with the commit SHA and pushed to ECR.
 
+![Deploy Workflow](assets/apply.jpg)
+
 **Apply Workflow**
 
 Runs Terraform plan to preview infrastructure changes. The plan is saved as an artifact and uploaded. After manual approval through the production environment, Terraform apply executes the changes. This ensures infrastructure modifications are reviewed before implementation.
