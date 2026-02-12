@@ -22,7 +22,7 @@ The system follows a microservices architecture pattern with clear separation be
 
 Watch the application running in production:
 
-<video src="assets/Screen Recording 2026-02-12 at 11.34.15.mov" controls width="100%"></video>
+<video src="assets/demo.mp4" controls width="100%"></video>
 
 The deployment architecture includes:
 
