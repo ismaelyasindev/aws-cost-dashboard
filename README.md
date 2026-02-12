@@ -22,7 +22,7 @@ The system follows a microservices architecture pattern with clear separation be
 
 Watch the application running in production:
 
-https://user-images.githubusercontent.com/YOUR_USERNAME/REPO/assets/Screen%20Recording%2026-02-12%20at%2011.34.15.mov
+https://github.com/ismaelyasindev/aws-cost-dashboard/raw/main/assets/Screen%20Recording%2026-02-12%20at%2011.34.15.mov
 
 The deployment architecture includes:
 
