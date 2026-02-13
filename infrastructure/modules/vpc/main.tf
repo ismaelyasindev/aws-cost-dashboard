@@ -85,15 +85,11 @@ resource "aws_route_table" "public" {
   }
 }
 
+# Single default route for public RT (one RT shared by all public subnets)
 resource "aws_route" "public_internet" {
-  for_each               = aws_subnet.public
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 # Private route tables
